@@ -1,0 +1,73 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Indian Card Games</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Georgia,serif;background:#0b3d24 radial-gradient(#14693f,#082a19);color:#f3e7c0;min-height:100vh;text-align:center;padding:12px}
+h1,h2{color:#d4af37;margin:8px}button,input{font:inherit;padding:10px 16px;margin:5px;border-radius:8px;border:1px solid #d4af37}
+button{background:#d4af37;color:#241a00;cursor:pointer}button:disabled{opacity:.4}input{background:#fffbea;color:#222;text-transform:none}
+.box{border:2px solid #d4af37;border-radius:14px;padding:14px;margin:10px auto;max-width:360px;background:#0006}
+.row{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:8px 0}
+.card{width:clamp(42px,11vw,62px);aspect-ratio:5/7;background:#fff8e1;color:#111;border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:clamp(14px,4vw,20px);box-shadow:0 2px 5px #0008;transition:.15s}
+.card.r{color:#b00020}.card.back{background:repeating-linear-gradient(45deg,#7a1c1c,#7a1c1c 4px,#5a1010 4px,#5a1010 8px);color:#0000}
+.card.ok{cursor:pointer;outline:3px solid #d4af37}.card.ok:hover{transform:translateY(-8px)}.card.sel{transform:translateY(-12px);outline-color:#fff}.card.dim{opacity:.55}
+.me{color:#7dff9f}small{opacity:.8}#msg{color:#ffb4a8;min-height:1.2em}
+</style></head><body>
+<h1>INDIAN CARD GAMES</h1><div id="msg"></div>
+<div id="home"><small>Classic Indian Card Games</small>
+<div class="box"><h2>7–8</h2>2 Players<br><button onclick="pick('78')">PLAY 7–8</button></div>
+<div class="box"><h2>2–3–5</h2>3 Players<br><button onclick="pick('235')">PLAY 2–3–5</button></div></div>
+<div id="entry" hidden class="box"><h2 id="et"></h2><input id="name" placeholder="Your name" maxlength="20"><br>
+<button id="bc" onclick="create()">CREATE GAME</button><br>OR<br><input id="code" placeholder="ROOM CODE" maxlength="6" style="text-transform:uppercase"><br>
+<button onclick="join()">JOIN GAME</button><br><button onclick="location='/'">Back</button></div>
+<div id="lobby" hidden class="box"><h2 id="lt"></h2>ROOM <b id="lc" style="font-size:1.6em;letter-spacing:4px"></b><div id="lp"></div><p id="lw"></p>
+<button onclick="copy(CODE)">COPY CODE</button><button onclick="copy(link())">COPY LINK</button><button onclick="wa()">WHATSAPP</button>
+<br><button id="go" onclick="send('start')">START GAME</button></div>
+<div id="table" hidden></div>
+<script>
+const s=io(),$=i=>document.getElementById(i);let kind,CODE,PID,S,pk=[],sel=[],ph=null;
+const saved=JSON.parse(sessionStorage.cg||"null"),urlCode="{{ code }}";
+const NAME={78:"7–8",235:"2–3–5"};
+function show(i){["home","entry","lobby","table"].forEach(x=>$(x).hidden=x!=i)}
+function pick(k){kind=k;$("et").textContent=NAME[k];show("entry")}
+function create(){s.emit("create",{kind,name:$("name").value})}
+function join(){s.emit("join",{code:$("code").value.trim().toUpperCase(),name:$("name").value})}
+function send(e,x={}){s.emit(e,{code:CODE,pid:PID,...x})}
+function link(){return location.origin+"/join/"+CODE}
+function copy(t){navigator.clipboard&&navigator.clipboard.writeText(t);msg("Copied")}
+function wa(){open("https://wa.me/?text="+encodeURIComponent("Join my "+NAME[S.room.kind]+" game! "+link()))}
+function msg(t){$("msg").textContent=t;setTimeout(()=>$("msg").textContent="",3000)}
+if(urlCode){pick("78");$("code").value=urlCode;$("et").textContent="Join room "+urlCode;$("bc").hidden=true}
+s.on("connect",()=>{if(saved&&(!urlCode||urlCode==saved.code)){s.emit("rejoin",saved)}});
+s.on("expired",()=>sessionStorage.removeItem("cg"));
+s.on("joined",d=>{PID=d.pid;CODE=d.code;sessionStorage.cg=JSON.stringify(d)});
+s.on("err",msg);
+s.on("peeked",d=>{ph=d;render()});
+s.on("state",d=>{S=d;PID=d.me;CODE=d.room.code;sel=[];ph=null;render()});
+const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
+function card(c,o={}){if(c==null)return el("div","card dim","");const e=el("div","card"+(o.back?" back":"")+("♥♦".includes(c.slice(-1))?" r":"")+(o.ok?" ok":"")+(o.sel?" sel":""),o.back?"":c);if(o.fn)e.onclick=o.fn;return e}
+function render(){if(!S)return;const r=S.room,g=S.game;
+ if(!g){show("lobby");$("lt").textContent=NAME[r.kind];$("lc").textContent=r.code;
+  $("lp").replaceChildren(...r.players.map(p=>el("div","",(p.on?"🟢 ":"⚪ ")+p.name+(p.host?" — HOST":""))));
+  $("lw").textContent=r.players.length<r.need?"Waiting for players… "+r.players.length+" / "+r.need:"All players present";
+  $("go").hidden=!S.host;$("go").disabled=r.players.length<r.need;return}
+ show("table");const T=$("table"),N=S.names,nm=p=>N[p]+(p==PID?" (you)":"");T.replaceChildren();
+ T.append(el("h2","","HUKUM "+(g.hukum||"—")));
+ const st=el("div","row");g.targets&&Object.keys(g.targets).forEach(p=>{const b=el("div","box");b.style.margin="0";b.style.maxWidth="160px";
+  b.append(el("b",p==PID?"me":"",nm(p)),el("div","","Target "+g.targets[p]+" · Tricks "+g.won[p]),el("small","","Cards "+(g.n[p]+g.up[p].filter(x=>x).length)+(r.players.find(q=>q.name==N[p]&&!q.on)?" · offline":"")));
+  if(g.carry[p])b.append(el("small","","Pending shortfall "+g.carry[p]));st.append(b)});T.append(st);
+ Object.keys(g.up).filter(p=>p!=PID&&g.up[p].length).forEach(p=>{T.append(el("small","",N[p]+" table cards"));const d=el("div","row");g.up[p].forEach((c,i)=>d.append(c?card(c):el("div","card dim","")));T.append(d)});
+ const tr=el("div","box");tr.style.maxWidth="600px";tr.append(el("small","",g.trick.length?"Current trick":(g.last?"Last trick won by "+N[g.last.winner]:"Trick area")));
+ const tr2=el("div","row");(g.trick.length?g.trick:(g.last?g.last.plays:[])).forEach(([p,c])=>{const w=el("div");w.append(card(c),el("small","",N[p]));tr2.append(w)});tr.append(tr2);T.append(tr);
+ if(g.phase=="hukum"){if(PID==g.sel){const b=el("div","box");b.style.maxWidth="500px";b.append(el("b","","Select Hukum from your first five cards"));const bs=el("div","row");
+   g.elig.forEach(x=>{const u=el("button","",x);u.onclick=()=>send("hukum",{suit:x});bs.append(u)});b.append(bs,el("small","","Or select 2 of your next five cards:"));
+   const nf=el("div","row");g.nf.forEach((c,i)=>nf.append(card(c=="?"?"":c,{back:c=="?",ok:1,sel:sel.includes(i),fn:()=>{sel=sel.includes(i)?sel.filter(x=>x!=i):[...sel,i].slice(-2);if(sel.length==2)send("peek",{idxs:sel});render()}})));b.append(nf);
+   if(ph)ph.suits.forEach(x=>{const u=el("button","",x);u.onclick=()=>send("hukum",{suit:x,idxs:ph.idxs});b.append(u)});T.append(b)}
+  else T.append(el("p","","Waiting for "+N[g.sel]+" to choose Hukum…"))}
+ else if(g.phase=="play")T.append(el("p",g.turn==PID?"me":"",g.turn==PID?"🟢 YOUR TURN":"Waiting for "+N[g.turn]+"…"));
+ else{const b=el("div","box");b.append(el("h2","","GAME OVER"));Object.entries(g.result).forEach(([p,x])=>b.append(el("div","",N[p]+": target "+x.target+", made "+x.won+(x.shortfall?", shortfall "+x.shortfall+" (carried to next game)":" ✓"))));
+  if(S.host){const u=el("button","","NEXT GAME");u.onclick=()=>send("next");b.append(u)}else b.append(el("small","","Host starts the next game"));T.append(b)}
+ const pl=(c)=>g.legal.includes(c);
+ if(g.up[PID].length){T.append(el("small","","Your table cards"));const d=el("div","row");
+  g.up[PID].forEach((c,i)=>d.append(c?card(c,{ok:pl(c),fn:()=>pl(c)&&send("play",{card:c})}):el("div","card dim","")));T.append(d)}
+ T.append(el("small","","Your hand"));const h=el("div","row");g.hand.forEach(c=>h.append(card(c,{ok:pl(c),fn:()=>pl(c)&&send("play",{card:c})})));T.append(h)}
+</script></body></html>
